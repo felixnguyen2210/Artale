@@ -14,6 +14,7 @@ import { Chapter } from '../../types/audio';
 interface ChapterListProps {
 	chapters: Chapter[];
 	currentTime: number;
+	currentChapter?: Chapter;
 	onChapterPress: (chapter: Chapter) => void;
 }
 
@@ -75,24 +76,25 @@ const ChapterItem = ({
 export const ChapterList = ({
 	chapters,
 	currentTime,
+	currentChapter,
 	onChapterPress
 }: ChapterListProps) => {
 	const getCurrentChapter = () => {
-		return chapters.findIndex((chapter, index) => {
-			const nextChapter = chapters[index + 1];
-			return (
-				currentTime >= chapter.startTime &&
-				(!nextChapter || currentTime < nextChapter.startTime)
-			);
-		});
+		return chapters.findIndex((chapter) =>
+			currentChapter ? chapter.id === currentChapter.id : false
+		);
 	};
 
 	const isChapterCompleted = (chapter: Chapter, index: number) => {
-		const nextChapter = chapters[index + 1];
-		if (nextChapter) {
-			return currentTime >= nextChapter.startTime;
-		}
-		return false;
+		// A chapter is completed if we're past its duration and playing a later chapter
+		const currentChapterIndex = getCurrentChapter();
+		if (currentChapterIndex === -1) return false;
+
+		return (
+			index < currentChapterIndex ||
+			(index === currentChapterIndex &&
+				currentTime >= chapter.startTime + chapter.duration)
+		);
 	};
 
 	const currentChapterIndex = getCurrentChapter();

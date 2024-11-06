@@ -25,35 +25,50 @@ import { PlayerControls } from '../components/player/PlayerControls';
 import { ProgressBar } from '../components/player/ProgressBar';
 import { PlaybackSettings } from '../components/player/PlaybackSettings';
 import { ChapterList } from '../components/player/ChapterList';
-import { useAudioPlayerContext } from '../contexts/AudioPlayerContext';
+import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import { Chapter } from '../types/audio';
 import { GlassContainer } from '../components/common/GlassContainer';
 import { useSlideAnimation } from '../hooks/useSlideAnimation';
 
 const AudioPlayerScreen = () => {
 	const navigation = useNavigation();
-	const { playerState, currentBook, playPause, seek, setPlaybackRate } =
-		useAudioPlayerContext();
+	const {
+		state,
+		play,
+		pause,
+		seekTo,
+		setPlaybackRate,
+		skipForward,
+		skipBackward,
+		navigateToChapter
+	} = useAudioPlayer();
 
 	const [showChapters, setShowChapters] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
 
-	// Add these hooks at the component level
 	const chaptersAnimation = useSlideAnimation(showChapters);
 	const settingsAnimation = useSlideAnimation(showSettings);
 	const overlayAnimation = useSlideAnimation(showChapters || showSettings);
+
+	const handlePlayPause = async () => {
+		if (state.isPlaying) {
+			await pause();
+		} else {
+			await play();
+		}
+	};
 
 	const handleSleepTimer = () => {
 		// TODO: Implement sleep timer
 		console.log('Sleep timer pressed');
 	};
 
-	const handleChapterPress = (chapter: Chapter) => {
-		seek(chapter.startTime);
+	const handleChapterPress = async (chapter: Chapter) => {
+		await navigateToChapter(chapter);
 		setShowChapters(false);
 	};
 
-	if (!currentBook) return null;
+	if (!state.currentBook) return null;
 
 	return (
 		<SafeAreaView style={styles.container}>
@@ -78,9 +93,9 @@ const AudioPlayerScreen = () => {
 					showsVerticalScrollIndicator={false}>
 					<View style={styles.mainContent}>
 						<View style={styles.coverArt}>
-							{currentBook.coverUrl ? (
+							{state.currentBook.coverUrl ? (
 								<Image
-									source={{ uri: currentBook.coverUrl }}
+									source={{ uri: state.currentBook.coverUrl }}
 									style={styles.coverImage}
 								/>
 							) : (
@@ -91,8 +106,15 @@ const AudioPlayerScreen = () => {
 						</View>
 
 						<View style={styles.bookInfo}>
-							<Text style={styles.title}>{currentBook.title}</Text>
-							<Text style={styles.author}>{currentBook.author}</Text>
+							<Text style={styles.title}>{state.currentBook.title}</Text>
+							<Text style={styles.author}>{state.currentBook.author}</Text>
+							{state.currentChapter && (
+								<View style={styles.chapterInfo}>
+									<Text style={styles.chapterTitle}>
+										{state.currentChapter.title}
+									</Text>
+								</View>
+							)}
 						</View>
 
 						<View style={styles.actionButtons}>
@@ -119,16 +141,16 @@ const AudioPlayerScreen = () => {
 						</View>
 
 						<ProgressBar
-							currentTime={playerState.currentTime}
-							duration={playerState.duration}
-							onSeek={seek}
+							currentTime={state.currentTime}
+							duration={state.duration}
+							onSeek={seekTo}
 						/>
 
 						<PlayerControls
-							isPlaying={playerState.isPlaying}
-							onPlayPause={playPause}
-							onSkipForward={() => seek(playerState.currentTime + 30)}
-							onSkipBack={() => seek(playerState.currentTime - 30)}
+							isPlaying={state.isPlaying}
+							onPlayPause={handlePlayPause}
+							onSkipForward={skipForward}
+							onSkipBack={skipBackward}
 						/>
 					</View>
 				</ScrollView>
@@ -167,8 +189,8 @@ const AudioPlayerScreen = () => {
 						<GlassContainer style={styles.modalContent}>
 							<View style={styles.modalHandle} />
 							<ChapterList
-								chapters={currentBook.chapters}
-								currentTime={playerState.currentTime}
+								chapters={state.currentBook.chapters}
+								currentTime={state.currentTime}
 								onChapterPress={handleChapterPress}
 							/>
 						</GlassContainer>
@@ -190,7 +212,7 @@ const AudioPlayerScreen = () => {
 						<GlassContainer style={styles.modalContent}>
 							<View style={styles.modalHandle} />
 							<PlaybackSettings
-								playbackRate={playerState.playbackRate}
+								playbackRate={state.playbackRate}
 								onPlaybackRateChange={(rate) => {
 									setPlaybackRate(rate);
 									setShowSettings(false);
@@ -330,6 +352,21 @@ const styles = StyleSheet.create({
 	},
 	closeButton: {
 		padding: spacing.sm
+	},
+	chapterInfo: {
+		marginTop: spacing.md,
+		alignItems: 'center'
+	},
+	chapterTitle: {
+		fontSize: 14,
+		color: colors.text.primary,
+		opacity: 0.8,
+		textAlign: 'center'
+	},
+	chapterProgress: {
+		fontSize: 12,
+		color: colors.text.secondary,
+		marginTop: spacing.xs
 	}
 });
 

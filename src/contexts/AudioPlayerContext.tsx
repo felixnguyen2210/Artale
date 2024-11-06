@@ -19,6 +19,7 @@ interface AudioPlayerContextType {
 	skipForward: () => Promise<void>; // For 30sec skip
 	skipBackward: () => Promise<void>; // For 30sec skip
 	setPlaybackRate: (rate: number) => Promise<void>;
+	navigateToChapter: (chapter: Chapter) => Promise<void>;
 }
 
 const initialState: PlayerState = {
@@ -79,6 +80,16 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 
 			setState((prev) => ({ ...prev, isBuffering: true }));
 
+			// Find and update current chapter index
+			if (currentBookRef.current) {
+				const chapterIndex = currentBookRef.current.chapters.findIndex(
+					(c) => c.id === chapter.id
+				);
+				if (chapterIndex !== -1) {
+					currentChapterIndexRef.current = chapterIndex;
+				}
+			}
+
 			const { sound, status } = await Audio.Sound.createAsync(
 				{ uri: chapter.audioUrl },
 				{ shouldPlay: false, progressUpdateIntervalMillis: 1000 },
@@ -96,6 +107,17 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 		} catch (error) {
 			console.error('Error loading chapter:', error);
 			setState((prev) => ({ ...prev, isBuffering: false }));
+		}
+	};
+
+	const navigateToChapter = async (chapter: Chapter) => {
+		try {
+			if (!currentBookRef.current) return;
+
+			await loadChapter(chapter);
+			await play(); // Auto-play when navigating to a new chapter
+		} catch (error) {
+			console.error('Error navigating to chapter:', error);
 		}
 	};
 
@@ -219,7 +241,8 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 		playPreviousChapter,
 		skipForward,
 		skipBackward,
-		setPlaybackRate
+		setPlaybackRate,
+		navigateToChapter
 	};
 
 	return (

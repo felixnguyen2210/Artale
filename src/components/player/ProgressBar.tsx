@@ -1,5 +1,17 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+// src/components/player/ProgressBar.tsx
+import React, { useState } from 'react';
+import {
+	View,
+	Text,
+	StyleSheet,
+	TouchableOpacity,
+	Animated
+} from 'react-native';
+import {
+	PanGestureHandler,
+	State,
+	GestureHandlerRootView
+} from 'react-native-gesture-handler';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 
@@ -14,58 +26,109 @@ export const ProgressBar = ({
 	duration,
 	onSeek
 }: ProgressBarProps) => {
+	const [isDragging, setIsDragging] = useState(false);
+	const [draggedTime, setDraggedTime] = useState(0);
+
 	const formatTime = (seconds: number) => {
-		const mins = Math.floor(seconds / 60);
+		const hrs = Math.floor(seconds / 3600);
+		const mins = Math.floor((seconds % 3600) / 60);
 		const secs = Math.floor(seconds % 60);
+		if (hrs > 0) {
+			return `${hrs}:${mins.toString().padStart(2, '0')}:${secs
+				.toString()
+				.padStart(2, '0')}`;
+		}
 		return `${mins}:${secs.toString().padStart(2, '0')}`;
 	};
 
-	const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-	const handlePress = (event: any) => {
-		const { locationX, target } = event.nativeEvent;
-		target.measure((_x: number, _y: number, width: number) => {
-			const position = (locationX / width) * duration;
-			onSeek(position);
-		});
+	const onGestureEvent = ({ nativeEvent }: any) => {
+		const width = nativeEvent.x;
+		// Calculate percentage based on width of container
+		const percentage = Math.max(0, Math.min(1, width / 300)); // 300 is container width
+		const newTime = percentage * duration;
+		setDraggedTime(newTime);
 	};
 
+	const onHandlerStateChange = ({ nativeEvent }: any) => {
+		if (nativeEvent.state === State.BEGAN) {
+			setIsDragging(true);
+		} else if (nativeEvent.state === State.END) {
+			setIsDragging(false);
+			onSeek(draggedTime);
+		}
+	};
+
+	const displayTime = isDragging ? draggedTime : currentTime;
+	const progress = (displayTime / duration) * 100;
+
 	return (
-		<View style={styles.container}>
-			<Text style={styles.time}>{formatTime(currentTime)}</Text>
-			<Pressable style={styles.progressContainer} onPress={handlePress}>
-				<View style={styles.progressBg} />
-				<View style={[styles.progressFill, { width: `${progress}%` }]} />
-			</Pressable>
-			<Text style={styles.time}>{formatTime(duration)}</Text>
-		</View>
+		<GestureHandlerRootView style={styles.container}>
+			<View style={styles.timeContainer}>
+				<Text style={styles.timeText}>{formatTime(displayTime)}</Text>
+				<Text style={styles.timeText}>{formatTime(duration)}</Text>
+			</View>
+
+			<PanGestureHandler
+				onGestureEvent={onGestureEvent}
+				onHandlerStateChange={onHandlerStateChange}>
+				<View style={styles.progressContainer}>
+					<View style={styles.progressBackground} />
+					<View style={[styles.progressFill, { width: `${progress}%` }]} />
+					<View
+						style={[
+							styles.dragHandle,
+							{ left: `${progress}%` },
+							isDragging && styles.dragHandleActive
+						]}
+					/>
+				</View>
+			</PanGestureHandler>
+		</GestureHandlerRootView>
 	);
 };
 
 const styles = StyleSheet.create({
 	container: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		padding: spacing.md
+		width: '100%',
+		paddingHorizontal: spacing.md
 	},
-	time: {
+	timeContainer: {
+		flexDirection: 'row',
+		justifyContent: 'space-between',
+		marginBottom: spacing.xs
+	},
+	timeText: {
 		color: colors.text.secondary,
-		fontSize: 12,
-		width: 45
+		fontSize: 12
 	},
 	progressContainer: {
-		flex: 1,
-		height: 4,
-		marginHorizontal: spacing.sm,
-		borderRadius: 2,
-		overflow: 'hidden'
+		height: 20,
+		justifyContent: 'center'
 	},
-	progressBg: {
-		...StyleSheet.absoluteFillObject,
-		backgroundColor: colors.glass.light
+	progressBackground: {
+		position: 'absolute',
+		left: 0,
+		right: 0,
+		height: 4,
+		backgroundColor: colors.glass.light,
+		borderRadius: 2
 	},
 	progressFill: {
-		height: '100%',
-		backgroundColor: colors.primary
+		position: 'absolute',
+		left: 0,
+		height: 4,
+		backgroundColor: colors.primary,
+		borderRadius: 2
+	},
+	dragHandle: {
+		position: 'absolute',
+		width: 16,
+		height: 16,
+		borderRadius: 8,
+		backgroundColor: colors.primary,
+		transform: [{ translateX: -8 }, { translateY: -6 }]
+	},
+	dragHandleActive: {
+		transform: [{ translateX: -8 }, { translateY: -6 }, { scale: 1.2 }]
 	}
 });
