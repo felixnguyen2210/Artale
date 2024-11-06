@@ -1,19 +1,69 @@
-import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import {
+	View,
+	Text,
+	StyleSheet,
+	ActivityIndicator,
+	FlatList,
+	RefreshControl
+} from 'react-native';
 import { useAudioBooks } from '../../hooks/useAudioBooks';
+import { AudioBookCard } from './AudioBookCard';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
-import { GlassContainer } from '../common/GlassContainer';
+import { AudioBook } from '../../services/audioBooks/types';
 
-export const AudioBookList = () => {
-	const { data, isLoading, error } = useAudioBooks({
+interface AudioBookListProps {
+	searchQuery?: string;
+	category?: string;
+}
+
+export const AudioBookList = ({
+	searchQuery,
+	category
+}: AudioBookListProps) => {
+	const [page, setPage] = useState(1);
+	const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+	const { data, isLoading, error, refetch, isRefetching } = useAudioBooks({
 		limit: 20,
-		page: 1
+		page,
+		query: searchQuery,
+		genre: category !== 'All' ? category : undefined
 	});
+
+	const handleBookPress = (book: AudioBook) => {
+		// We'll implement this when we add audio player functionality
+		console.log('Book pressed:', book.title);
+	};
+
+	const handleRefresh = () => {
+		setPage(1);
+		refetch();
+	};
+
+	const handleLoadMore = () => {
+		if (isLoadingMore) return;
+		if (!data || page >= data.totalPages) return;
+
+		setIsLoadingMore(true);
+		setPage((prev) => prev + 1);
+		setIsLoadingMore(false);
+	};
+
+	const renderFooter = () => {
+		if (!isLoadingMore) return null;
+
+		return (
+			<View style={styles.footerLoader}>
+				<ActivityIndicator size='small' color={colors.primary} />
+			</View>
+		);
+	};
 
 	if (isLoading) {
 		return (
-			<View style={styles.loadingContainer}>
+			<View style={styles.centerContainer}>
 				<ActivityIndicator size='large' color={colors.primary} />
 				<Text style={styles.loadingText}>Loading audiobooks...</Text>
 			</View>
@@ -22,70 +72,72 @@ export const AudioBookList = () => {
 
 	if (error) {
 		return (
-			<View style={styles.errorContainer}>
-				<Text style={styles.errorText}>Error loading audiobooks.</Text>
+			<View style={styles.centerContainer}>
+				<Text style={styles.errorText}>
+					Error loading audiobooks. Please try again.
+				</Text>
 			</View>
 		);
 	}
 
+	const renderBook = ({ item }: { item: AudioBook }) => (
+		<AudioBookCard book={item} onPress={handleBookPress} />
+	);
+
 	return (
-		<View style={styles.container}>
-			<Text style={styles.title}>Available Audiobooks</Text>
-			{data?.books.map((book) => (
-				<GlassContainer key={book.id} style={styles.bookCard}>
-					<Text style={styles.bookTitle}>{book.title}</Text>
-					<Text style={styles.bookAuthor}>{book.author}</Text>
-					<Text style={styles.bookDuration}>
-						Duration: {Math.floor(book.duration / 60)} minutes
-					</Text>
-				</GlassContainer>
-			))}
-		</View>
+		<FlatList
+			data={data?.books}
+			renderItem={renderBook}
+			keyExtractor={(item) => item.id}
+			contentContainerStyle={styles.container}
+			showsVerticalScrollIndicator={false}
+			refreshControl={
+				<RefreshControl
+					refreshing={isRefetching}
+					onRefresh={handleRefresh}
+					tintColor={colors.primary}
+					colors={[colors.primary]}
+				/>
+			}
+			onEndReached={handleLoadMore}
+			onEndReachedThreshold={0.5}
+			ListFooterComponent={renderFooter}
+			ListEmptyComponent={
+				<Text style={styles.emptyText}>No audiobooks found</Text>
+			}
+		/>
 	);
 };
 
 const styles = StyleSheet.create({
 	container: {
-		padding: spacing.md
+		padding: spacing.md,
+		flexGrow: 1
 	},
-	loadingContainer: {
-		padding: spacing.xl,
-		alignItems: 'center'
+	centerContainer: {
+		flex: 1,
+		justifyContent: 'center',
+		alignItems: 'center',
+		padding: spacing.xl
 	},
 	loadingText: {
+		marginTop: spacing.md,
 		color: colors.text.secondary,
-		marginTop: spacing.md
-	},
-	errorContainer: {
-		padding: spacing.xl,
-		alignItems: 'center'
+		fontSize: 14
 	},
 	errorText: {
-		color: colors.text.secondary
-	},
-	title: {
-		fontSize: 20,
-		fontWeight: '600',
-		color: colors.text.primary,
-		marginBottom: spacing.md
-	},
-	bookCard: {
-		marginBottom: spacing.md,
-		padding: spacing.md
-	},
-	bookTitle: {
-		fontSize: 16,
-		fontWeight: '600',
-		color: colors.text.primary
-	},
-	bookAuthor: {
-		fontSize: 14,
 		color: colors.text.secondary,
-		marginTop: 4
+		fontSize: 14,
+		textAlign: 'center'
 	},
-	bookDuration: {
-		fontSize: 12,
-		color: colors.text.tertiary,
-		marginTop: 4
+	emptyText: {
+		color: colors.text.secondary,
+		fontSize: 14,
+		textAlign: 'center',
+		marginTop: spacing.xl
+	},
+	footerLoader: {
+		paddingVertical: spacing.md,
+		alignItems: 'center'
 	}
 });

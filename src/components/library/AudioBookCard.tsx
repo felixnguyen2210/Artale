@@ -1,25 +1,44 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { Book, PlayCircle } from 'lucide-react-native';
+import { Book, PlayCircle, Pause } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { GlassContainer } from '../common/GlassContainer';
-import { AudioBook } from '../../services/audioBooks/types';
+import { AudioBook } from '../../types/audio';
+import { useAudioPlayer } from '../../contexts/AudioPlayerContext';
 
 interface AudioBookCardProps {
 	book: AudioBook;
-	onPress?: (book: AudioBook) => void;
 }
 
-export const AudioBookCard = ({ book, onPress }: AudioBookCardProps) => {
+export const AudioBookCard = ({ book }: AudioBookCardProps) => {
+	const { state, loadBook, play, pause } = useAudioPlayer();
+
+	const isThisBookPlaying =
+		state.currentBook?.id === book.id && state.isPlaying;
+
 	const formatDuration = (seconds: number) => {
 		const hours = Math.floor(seconds / 3600);
 		const minutes = Math.floor((seconds % 3600) / 60);
 		return hours > 0 ? `${hours}h ${minutes}m` : `${minutes} minutes`;
 	};
 
+	const handlePlayPress = async () => {
+		console.log('Book data:', book); // Add this to see what data we have
+		if (state.currentBook?.id === book.id) {
+			if (state.isPlaying) {
+				await pause();
+			} else {
+				await play();
+			}
+		} else {
+			await loadBook(book);
+			await play();
+		}
+	};
+
 	return (
-		<TouchableOpacity onPress={() => onPress?.(book)}>
+		<TouchableOpacity onPress={handlePlayPress}>
 			<GlassContainer style={styles.container}>
 				<View style={styles.content}>
 					{book.coverUrl ? (
@@ -34,8 +53,12 @@ export const AudioBookCard = ({ book, onPress }: AudioBookCardProps) => {
 						<Text style={styles.author}>{book.author}</Text>
 						<Text style={styles.duration}>{formatDuration(book.duration)}</Text>
 					</View>
-					<TouchableOpacity style={styles.playButton}>
-						<PlayCircle color={colors.text.primary} size={24} />
+					<TouchableOpacity style={styles.playButton} onPress={handlePlayPress}>
+						{isThisBookPlaying ? (
+							<Pause color={colors.text.primary} size={24} />
+						) : (
+							<PlayCircle color={colors.text.primary} size={24} />
+						)}
 					</TouchableOpacity>
 				</View>
 			</GlassContainer>
@@ -43,7 +66,6 @@ export const AudioBookCard = ({ book, onPress }: AudioBookCardProps) => {
 	);
 };
 
-// Styles remain the same, just rename downloadButton to playButton
 const styles = StyleSheet.create({
 	container: {
 		marginVertical: spacing.sm

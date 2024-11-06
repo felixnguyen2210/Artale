@@ -1,40 +1,60 @@
-import { libriVoxAPI } from '../api/librivox';
+import axios from 'axios';
+import {
+	AudioBook,
+	AudioBookFilter,
+	LibriVoxResponse,
+	LibriVoxBook
+} from './types';
 import { mapLibriVoxBookToAudioBook } from './mappers';
-import { AudioBook, AudioBookFilter } from './types';
 
 class AudioBookService {
-	async getBooks(filter: AudioBookFilter): Promise<{
-		books: AudioBook[];
-		totalPages: number;
-		currentPage: number;
-	}> {
-		try {
-			const response = await libriVoxAPI.getBooks(filter);
+	private api;
 
-			const books = response.books.map(mapLibriVoxBookToAudioBook);
-
-			return {
-				books,
-				totalPages: response.pagination?.total_pages || 1,
-				currentPage: response.pagination?.page || 1
-			};
-		} catch (error) {
-			console.error('Error fetching audio books:', error);
-			throw error;
-		}
+	constructor() {
+		this.api = axios.create({
+			baseURL: 'https://librivox.org/api/feed'
+		});
 	}
 
-	async getBookById(id: string): Promise<AudioBook> {
+	async getBooks(filter: AudioBookFilter) {
 		try {
-			const response = await libriVoxAPI.getBookById(id);
-			if (!response.books || response.books.length === 0) {
-				throw new Error('Book not found');
+			const searchTerm = filter.query?.trim();
+
+			const params = {
+				format: 'json',
+				limit: filter.limit || 20,
+				offset: filter.page ? (filter.page - 1) * (filter.limit || 20) : 0,
+				...(searchTerm && { title: `^${searchTerm}` })
+			};
+
+			const response = await this.api.get<LibriVoxResponse>('/audiobooks', {
+				params
+			});
+
+			if (response.data.books && Array.isArray(response.data.books)) {
+				const validBooks = response.data.books
+					.filter((book) => book?.title)
+					.map(mapLibriVoxBookToAudioBook);
+
+				return {
+					books: validBooks,
+					currentPage: filter.page || 1,
+					totalPages: Math.ceil(validBooks.length / (filter.limit || 20))
+				};
 			}
 
-			return mapLibriVoxBookToAudioBook(response.books[0]);
+			return {
+				books: [],
+				currentPage: 1,
+				totalPages: 0
+			};
 		} catch (error) {
-			console.error('Error fetching audio book:', error);
-			throw error;
+			console.error('Error fetching books:', error);
+			return {
+				books: [],
+				currentPage: 1,
+				totalPages: 0
+			};
 		}
 	}
 }
