@@ -9,7 +9,6 @@ import { AudioBookList } from '../components/library/AudioBookList';
 import { MiniPlayer } from '../components/player/MiniPlayer';
 import { spacing } from '../theme/spacing';
 import { useDebounce } from '../hooks/useDebounce';
-import { AudioTest } from '../components/test/AudioTest';
 
 const LibraryScreen = () => {
 	const [selectedCategory, setSelectedCategory] = useState('All');
@@ -47,7 +46,6 @@ const LibraryScreen = () => {
 				</View>
 				<MiniPlayer />
 			</GradientBackground>
-			<AudioTest />
 		</SafeAreaView>
 	);
 };

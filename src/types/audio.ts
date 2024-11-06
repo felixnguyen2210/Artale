@@ -1,4 +1,4 @@
-// LibriVox API types - exactly matching their response
+// API Response Types
 export interface LibriVoxReader {
 	reader_id: string;
 	display_name: string;
@@ -23,34 +23,39 @@ export interface LibriVoxGenre {
 export interface LibriVoxBook {
 	id: string;
 	title: string;
-	description: string;
+	description?: string;
 	language: string;
-	copyright_year: string;
+	copyright_year?: string;
 	num_sections?: number;
 	url_text_source?: string;
-	totaltime: string;
-	totaltimesecs: number;
+	totaltime?: string;
+	totaltimesecs?: number;
 	authors: Array<{
 		id: number;
 		first_name: string;
 		last_name: string;
 	}>;
-	sections: LibriVoxSection[];
-	genres: LibriVoxGenre[];
+	sections?: LibriVoxSection[];
+	genres?: LibriVoxGenre[];
 }
 
 export interface LibriVoxResponse {
 	books: LibriVoxBook[];
+	pagination?: {
+		page: number;
+		total_pages: number;
+		total_items: number;
+	};
 }
 
-// Our app's internal types
+// App Types
 export interface Chapter {
 	id: string;
 	title: string;
 	startTime: number;
 	duration: number;
 	audioUrl: string;
-	reader?: string; // Added reader info
+	reader?: string;
 }
 
 export interface AudioBook {
@@ -70,7 +75,16 @@ export interface AudioBook {
 	progress?: number;
 }
 
-// Player types
+export interface AudioBookFilter {
+	genre?: string;
+	language?: string;
+	author?: string;
+	query?: string;
+	page?: number;
+	limit?: number;
+	sortBy?: 'title' | 'author' | 'recent';
+}
+
 export interface PlayerState {
 	isPlaying: boolean;
 	currentTime: number;
@@ -78,4 +92,5 @@ export interface PlayerState {
 	playbackRate: number;
 	isBuffering: boolean;
 	currentChapter?: Chapter;
+	currentBook?: AudioBook;
 }

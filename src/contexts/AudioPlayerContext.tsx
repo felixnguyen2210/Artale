@@ -5,81 +5,82 @@ import React, {
 	useRef,
 	useState
 } from 'react';
-import {
-	Audio,
-	InterruptionModeIOS,
-	InterruptionModeAndroid,
-	AVPlaybackStatus
-} from 'expo-av';
-import { AudioBook } from '../types/audio';
-import { PlayerState, PlayerContextType } from '../types/player';
+import { Audio, AVPlaybackStatus } from 'expo-av';
+import { AudioBook, Chapter, PlayerState } from '../types/audio';
 
-const initialPlayerState: PlayerState = {
+interface AudioPlayerContextType {
+	state: PlayerState;
+	loadBook: (book: AudioBook) => Promise<void>;
+	play: () => Promise<void>;
+	pause: () => Promise<void>;
+	seekTo: (position: number) => Promise<void>;
+	playNextChapter: () => Promise<void>;
+	playPreviousChapter: () => Promise<void>;
+	skipForward: () => Promise<void>; // For 30sec skip
+	skipBackward: () => Promise<void>; // For 30sec skip
+	setPlaybackRate: (rate: number) => Promise<void>;
+}
+
+const initialState: PlayerState = {
 	isPlaying: false,
-	isBuffering: false,
 	currentTime: 0,
 	duration: 0,
-	currentBook: null,
-	currentChapterIndex: 0,
 	playbackRate: 1,
-	error: null
+	isBuffering: false,
+	currentBook: undefined,
+	currentChapter: undefined
 };
 
-const AudioPlayerContext = createContext<PlayerContextType | undefined>(
+const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(
 	undefined
 );
 
 export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 	children
 }) => {
-	const [state, setState] = useState<PlayerState>(initialPlayerState);
+	const [state, setState] = useState<PlayerState>(initialState);
 	const soundRef = useRef<Audio.Sound | null>(null);
+	const currentBookRef = useRef<AudioBook | null>(null);
+	const currentChapterIndexRef = useRef<number>(0);
 
-	// Set up audio session on mount
 	useEffect(() => {
-		const setupAudio = async () => {
-			try {
-				await Audio.setAudioModeAsync({
-					staysActiveInBackground: true,
-					interruptionModeIOS: InterruptionModeIOS.DuckOthers,
-					playsInSilentModeIOS: true,
-					shouldDuckAndroid: true,
-					interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-					playThroughEarpieceAndroid: false
-				});
-			} catch (error) {
-				console.error('Error setting up audio mode:', error);
-			}
-		};
-
 		setupAudio();
-
-		// Cleanup on unmount
 		return () => {
 			if (soundRef.current) {
-				soundRef.current.unloadAsync();
+				soundRef.current.unloadAsync(); // Don't await in cleanup
 			}
 		};
 	}, []);
 
-	const loadBook = async (book: AudioBook) => {
+	const setupAudio = async () => {
 		try {
-			// Unload current audio if exists
+			await Audio.setAudioModeAsync({
+				staysActiveInBackground: true,
+				playsInSilentModeIOS: true,
+				shouldDuckAndroid: true,
+				playThroughEarpieceAndroid: false
+			});
+		} catch (error) {
+			console.error('Error setting up audio:', error);
+		}
+	};
+
+	const cleanup = async () => {
+		if (soundRef.current) {
+			await soundRef.current.unloadAsync();
+		}
+	};
+
+	const loadChapter = async (chapter: Chapter) => {
+		try {
 			if (soundRef.current) {
 				await soundRef.current.unloadAsync();
 			}
 
-			setState((prev) => ({
-				...prev,
-				isBuffering: true,
-				currentBook: book,
-				currentChapterIndex: 0,
-				error: null
-			}));
+			setState((prev) => ({ ...prev, isBuffering: true }));
 
-			// Now using the correct audioUrl property
-			const { sound } = await Audio.Sound.createAsync(
-				{ uri: book.audioUrl },
+			const { sound, status } = await Audio.Sound.createAsync(
+				{ uri: chapter.audioUrl },
 				{ shouldPlay: false, progressUpdateIntervalMillis: 1000 },
 				onPlaybackStatusUpdate
 			);
@@ -88,16 +89,24 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 
 			setState((prev) => ({
 				...prev,
-				isBuffering: false
+				isBuffering: false,
+				currentChapter: chapter,
+				duration: status.isLoaded ? status.durationMillis! / 1000 : 0
 			}));
 		} catch (error) {
-			console.error('Error loading book:', error);
-			setState((prev) => ({
-				...prev,
-				isBuffering: false,
-				error: 'Failed to load audio'
-			}));
+			console.error('Error loading chapter:', error);
+			setState((prev) => ({ ...prev, isBuffering: false }));
 		}
+	};
+
+	const loadBook = async (book: AudioBook) => {
+		currentBookRef.current = book;
+		currentChapterIndexRef.current = 0;
+		setState((prev) => ({
+			...prev,
+			currentBook: book // Add this line
+		}));
+		await loadChapter(book.chapters[0]);
 	};
 
 	const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
@@ -106,58 +115,111 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 		setState((prev) => ({
 			...prev,
 			isPlaying: status.isPlaying,
-			isBuffering: status.isBuffering,
 			currentTime: status.positionMillis / 1000,
 			duration: status.durationMillis ? status.durationMillis / 1000 : 0,
-			playbackRate: status.rate
+			isBuffering: status.isBuffering
 		}));
+
+		// Auto-play next chapter when current one ends
+		if (status.didJustFinish) {
+			playNextChapter();
+		}
 	};
 
 	const play = async () => {
 		try {
-			if (!soundRef.current) return;
-			await soundRef.current.playAsync();
+			if (soundRef.current) {
+				await soundRef.current.playAsync();
+			}
 		} catch (error) {
-			console.error('Error playing audio:', error);
+			console.error('Error playing:', error);
 		}
 	};
 
 	const pause = async () => {
 		try {
-			if (!soundRef.current) return;
-			await soundRef.current.pauseAsync();
+			if (soundRef.current) {
+				await soundRef.current.pauseAsync();
+			}
 		} catch (error) {
-			console.error('Error pausing audio:', error);
+			console.error('Error pausing:', error);
 		}
 	};
 
 	const seekTo = async (position: number) => {
 		try {
-			if (!soundRef.current) return;
-			await soundRef.current.setPositionAsync(position * 1000);
+			if (soundRef.current) {
+				await soundRef.current.setPositionAsync(position * 1000);
+			}
 		} catch (error) {
-			console.error('Error seeking audio:', error);
+			console.error('Error seeking:', error);
+		}
+	};
+
+	const playNextChapter = async () => {
+		if (!currentBookRef.current) return;
+
+		const nextIndex = currentChapterIndexRef.current + 1;
+		if (nextIndex < currentBookRef.current.chapters.length) {
+			currentChapterIndexRef.current = nextIndex;
+			await loadChapter(currentBookRef.current.chapters[nextIndex]);
+			await play();
+		}
+	};
+
+	const playPreviousChapter = async () => {
+		if (!currentBookRef.current) return;
+
+		const prevIndex = currentChapterIndexRef.current - 1;
+		if (prevIndex >= 0) {
+			currentChapterIndexRef.current = prevIndex;
+			await loadChapter(currentBookRef.current.chapters[prevIndex]);
+			await play();
+		}
+	};
+
+	const skipForward = async () => {
+		if (soundRef.current) {
+			const status = await soundRef.current.getStatusAsync();
+			if (status.isLoaded) {
+				const newPosition = status.positionMillis + 30000; // 30 seconds
+				await seekTo(newPosition / 1000);
+			}
+		}
+	};
+
+	const skipBackward = async () => {
+		if (soundRef.current) {
+			const status = await soundRef.current.getStatusAsync();
+			if (status.isLoaded) {
+				const newPosition = Math.max(0, status.positionMillis - 30000); // 30 seconds
+				await seekTo(newPosition / 1000);
+			}
 		}
 	};
 
 	const setPlaybackRate = async (rate: number) => {
 		try {
-			if (!soundRef.current) return;
-			await soundRef.current.setRateAsync(rate, true);
+			if (soundRef.current) {
+				await soundRef.current.setRateAsync(rate, true);
+				setState((prev) => ({ ...prev, playbackRate: rate }));
+			}
 		} catch (error) {
 			console.error('Error setting playback rate:', error);
 		}
 	};
 
-	const value: PlayerContextType = {
+	const value = {
 		state,
 		loadBook,
 		play,
 		pause,
 		seekTo,
-		setPlaybackRate,
-		skipToNextChapter: async () => {}, // We'll implement these later
-		skipToPreviousChapter: async () => {} // We'll implement these later
+		playNextChapter,
+		playPreviousChapter,
+		skipForward,
+		skipBackward,
+		setPlaybackRate
 	};
 
 	return (
@@ -169,7 +231,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 
 export const useAudioPlayer = () => {
 	const context = useContext(AudioPlayerContext);
-	if (context === undefined) {
+	if (!context) {
 		throw new Error(
 			'useAudioPlayer must be used within an AudioPlayerProvider'
 		);

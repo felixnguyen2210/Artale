@@ -23,8 +23,7 @@ export const MiniPlayer = () => {
 	};
 
 	const handlePress = () => {
-		// We'll implement navigation to full player screen later
-		console.log('Navigate to full player');
+		navigation.navigate('AudioPlayer');
 	};
 
 	return (
