@@ -5,7 +5,12 @@ import React, {
 	useRef,
 	useState
 } from 'react';
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import {
+	Audio,
+	InterruptionModeAndroid,
+	InterruptionModeIOS,
+	AVPlaybackStatus
+} from 'expo-av';
 import { AudioBook, Chapter, PlayerState } from '../types/audio';
 
 interface AudioPlayerContextType {
@@ -16,8 +21,8 @@ interface AudioPlayerContextType {
 	seekTo: (position: number) => Promise<void>;
 	playNextChapter: () => Promise<void>;
 	playPreviousChapter: () => Promise<void>;
-	skipForward: () => Promise<void>; // For 30sec skip
-	skipBackward: () => Promise<void>; // For 30sec skip
+	skipForward: () => Promise<void>;
+	skipBackward: () => Promise<void>;
 	setPlaybackRate: (rate: number) => Promise<void>;
 	navigateToChapter: (chapter: Chapter) => Promise<void>;
 }
@@ -29,7 +34,8 @@ const initialState: PlayerState = {
 	playbackRate: 1,
 	isBuffering: false,
 	currentBook: undefined,
-	currentChapter: undefined
+	currentChapter: undefined,
+	error: null
 };
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(
@@ -43,15 +49,22 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 	const soundRef = useRef<Audio.Sound | null>(null);
 	const currentBookRef = useRef<AudioBook | null>(null);
 	const currentChapterIndexRef = useRef<number>(0);
+	const isMounted = useRef(true);
+	const isTransitioning = useRef(false);
 
 	useEffect(() => {
 		setupAudio();
 		return () => {
-			if (soundRef.current) {
-				soundRef.current.unloadAsync(); // Don't await in cleanup
-			}
+			isMounted.current = false;
+			cleanup();
 		};
 	}, []);
+
+	const safeSetState = (updater: (prev: PlayerState) => PlayerState) => {
+		if (isMounted.current) {
+			setState(updater);
+		}
+	};
 
 	const setupAudio = async () => {
 		try {
@@ -59,46 +72,58 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 				staysActiveInBackground: true,
 				playsInSilentModeIOS: true,
 				shouldDuckAndroid: true,
-				playThroughEarpieceAndroid: false
+				playThroughEarpieceAndroid: false,
+				interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+				interruptionModeAndroid: InterruptionModeAndroid.DuckOthers
 			});
+			await Audio.setIsEnabledAsync(true);
 		} catch (error) {
 			console.error('Error setting up audio:', error);
+			safeSetState((prev) => ({ ...prev, error: 'Failed to setup audio' }));
 		}
 	};
 
 	const cleanup = async () => {
-		if (soundRef.current) {
-			await soundRef.current.unloadAsync();
+		try {
+			if (soundRef.current) {
+				const status = await soundRef.current.getStatusAsync();
+				if (status.isLoaded) {
+					await soundRef.current.stopAsync();
+					await soundRef.current.unloadAsync();
+				}
+				soundRef.current = null;
+			}
+			safeSetState((prev) => ({
+				...prev,
+				isPlaying: false,
+				isBuffering: false
+			}));
+		} catch (error) {
+			console.error('Error cleaning up audio:', error);
 		}
 	};
 
 	const loadChapter = async (chapter: Chapter) => {
+		if (isTransitioning.current) return;
+		isTransitioning.current = true;
+
 		try {
-			if (soundRef.current) {
-				await soundRef.current.unloadAsync();
-			}
-
-			setState((prev) => ({ ...prev, isBuffering: true }));
-
-			// Find and update current chapter index
-			if (currentBookRef.current) {
-				const chapterIndex = currentBookRef.current.chapters.findIndex(
-					(c) => c.id === chapter.id
-				);
-				if (chapterIndex !== -1) {
-					currentChapterIndexRef.current = chapterIndex;
-				}
-			}
+			await cleanup();
+			safeSetState((prev) => ({ ...prev, isBuffering: true, error: null }));
 
 			const { sound, status } = await Audio.Sound.createAsync(
 				{ uri: chapter.audioUrl },
-				{ shouldPlay: false, progressUpdateIntervalMillis: 1000 },
+				{ shouldPlay: false, progressUpdateIntervalMillis: 500 },
 				onPlaybackStatusUpdate
 			);
 
-			soundRef.current = sound;
+			if (!isMounted.current) {
+				await sound.unloadAsync();
+				return;
+			}
 
-			setState((prev) => ({
+			soundRef.current = sound;
+			safeSetState((prev) => ({
 				...prev,
 				isBuffering: false,
 				currentChapter: chapter,
@@ -106,128 +131,226 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 			}));
 		} catch (error) {
 			console.error('Error loading chapter:', error);
-			setState((prev) => ({ ...prev, isBuffering: false }));
+			safeSetState((prev) => ({
+				...prev,
+				isBuffering: false,
+				error: 'Failed to load audio'
+			}));
+		} finally {
+			isTransitioning.current = false;
 		}
-	};
-
-	const navigateToChapter = async (chapter: Chapter) => {
-		try {
-			if (!currentBookRef.current) return;
-
-			await loadChapter(chapter);
-			await play(); // Auto-play when navigating to a new chapter
-		} catch (error) {
-			console.error('Error navigating to chapter:', error);
-		}
-	};
-
-	const loadBook = async (book: AudioBook) => {
-		currentBookRef.current = book;
-		currentChapterIndexRef.current = 0;
-		setState((prev) => ({
-			...prev,
-			currentBook: book // Add this line
-		}));
-		await loadChapter(book.chapters[0]);
 	};
 
 	const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-		if (!status.isLoaded) return;
+		if (!status.isLoaded || !isMounted.current) return;
 
-		setState((prev) => ({
+		safeSetState((prev) => ({
 			...prev,
 			isPlaying: status.isPlaying,
 			currentTime: status.positionMillis / 1000,
-			duration: status.durationMillis ? status.durationMillis / 1000 : 0,
+			duration: status.durationMillis
+				? status.durationMillis / 1000
+				: prev.duration,
 			isBuffering: status.isBuffering
 		}));
 
-		// Auto-play next chapter when current one ends
-		if (status.didJustFinish) {
+		if (status.didJustFinish && !status.isLooping && !isTransitioning.current) {
 			playNextChapter();
+		}
+	};
+
+	// ... (previous code remains the same until onPlaybackStatusUpdate)
+
+	const loadBook = async (book: AudioBook) => {
+		try {
+			currentBookRef.current = book;
+			currentChapterIndexRef.current = 0;
+			safeSetState((prev) => ({
+				...prev,
+				currentBook: book,
+				error: null
+			}));
+			await loadChapter(book.chapters[0]);
+		} catch (error) {
+			console.error('Error loading book:', error);
+			safeSetState((prev) => ({ ...prev, error: 'Failed to load book' }));
 		}
 	};
 
 	const play = async () => {
 		try {
-			if (soundRef.current) {
-				await soundRef.current.playAsync();
+			if (soundRef.current && !isTransitioning.current) {
+				const status = await soundRef.current.getStatusAsync();
+				if (status.isLoaded) {
+					await soundRef.current.playAsync();
+					safeSetState((prev) => ({ ...prev, isPlaying: true }));
+				} else {
+					// Reload current chapter if sound is not loaded
+					if (state.currentChapter) {
+						await loadChapter(state.currentChapter);
+						await soundRef.current?.playAsync();
+					}
+				}
 			}
 		} catch (error) {
 			console.error('Error playing:', error);
+			safeSetState((prev) => ({ ...prev, error: 'Failed to play audio' }));
 		}
 	};
 
 	const pause = async () => {
 		try {
-			if (soundRef.current) {
-				await soundRef.current.pauseAsync();
+			if (soundRef.current && !isTransitioning.current) {
+				const status = await soundRef.current.getStatusAsync();
+				if (status.isLoaded) {
+					await soundRef.current.pauseAsync();
+					safeSetState((prev) => ({ ...prev, isPlaying: false }));
+				}
 			}
 		} catch (error) {
 			console.error('Error pausing:', error);
+			safeSetState((prev) => ({ ...prev, error: 'Failed to pause audio' }));
 		}
 	};
 
 	const seekTo = async (position: number) => {
 		try {
-			if (soundRef.current) {
-				await soundRef.current.setPositionAsync(position * 1000);
+			if (soundRef.current && !isTransitioning.current) {
+				const status = await soundRef.current.getStatusAsync();
+				if (status.isLoaded) {
+					await soundRef.current.setPositionAsync(position * 1000);
+					safeSetState((prev) => ({ ...prev, currentTime: position }));
+				} else if (state.currentChapter) {
+					// Reload and seek if sound is not loaded
+					await loadChapter(state.currentChapter);
+					await soundRef.current?.setPositionAsync(position * 1000);
+				}
 			}
 		} catch (error) {
 			console.error('Error seeking:', error);
+			safeSetState((prev) => ({ ...prev, error: 'Failed to seek' }));
 		}
 	};
 
 	const playNextChapter = async () => {
-		if (!currentBookRef.current) return;
+		if (!currentBookRef.current || isTransitioning.current) return;
 
-		const nextIndex = currentChapterIndexRef.current + 1;
-		if (nextIndex < currentBookRef.current.chapters.length) {
-			currentChapterIndexRef.current = nextIndex;
-			await loadChapter(currentBookRef.current.chapters[nextIndex]);
-			await play();
+		try {
+			const nextIndex = currentChapterIndexRef.current + 1;
+			if (nextIndex < currentBookRef.current.chapters.length) {
+				currentChapterIndexRef.current = nextIndex;
+				const nextChapter = currentBookRef.current.chapters[nextIndex];
+				await loadChapter(nextChapter);
+				if (state.isPlaying) {
+					await play();
+				}
+			} else {
+				// End of book reached
+				await pause();
+				safeSetState((prev) => ({ ...prev, currentTime: 0 }));
+			}
+		} catch (error) {
+			console.error('Error playing next chapter:', error);
+			safeSetState((prev) => ({
+				...prev,
+				error: 'Failed to play next chapter'
+			}));
 		}
 	};
 
 	const playPreviousChapter = async () => {
-		if (!currentBookRef.current) return;
+		if (!currentBookRef.current || isTransitioning.current) return;
 
-		const prevIndex = currentChapterIndexRef.current - 1;
-		if (prevIndex >= 0) {
-			currentChapterIndexRef.current = prevIndex;
-			await loadChapter(currentBookRef.current.chapters[prevIndex]);
-			await play();
+		try {
+			const prevIndex = currentChapterIndexRef.current - 1;
+			if (prevIndex >= 0) {
+				currentChapterIndexRef.current = prevIndex;
+				const prevChapter = currentBookRef.current.chapters[prevIndex];
+				await loadChapter(prevChapter);
+				if (state.isPlaying) {
+					await play();
+				}
+			}
+		} catch (error) {
+			console.error('Error playing previous chapter:', error);
+			safeSetState((prev) => ({
+				...prev,
+				error: 'Failed to play previous chapter'
+			}));
 		}
 	};
 
 	const skipForward = async () => {
-		if (soundRef.current) {
+		if (!soundRef.current || isTransitioning.current) return;
+
+		try {
 			const status = await soundRef.current.getStatusAsync();
 			if (status.isLoaded) {
 				const newPosition = status.positionMillis + 30000; // 30 seconds
-				await seekTo(newPosition / 1000);
+				if (newPosition < status.durationMillis!) {
+					await seekTo(newPosition / 1000);
+				} else {
+					await playNextChapter();
+				}
 			}
+		} catch (error) {
+			console.error('Error skipping forward:', error);
+			safeSetState((prev) => ({ ...prev, error: 'Failed to skip forward' }));
 		}
 	};
 
 	const skipBackward = async () => {
-		if (soundRef.current) {
+		if (!soundRef.current || isTransitioning.current) return;
+
+		try {
 			const status = await soundRef.current.getStatusAsync();
 			if (status.isLoaded) {
 				const newPosition = Math.max(0, status.positionMillis - 30000); // 30 seconds
 				await seekTo(newPosition / 1000);
 			}
+		} catch (error) {
+			console.error('Error skipping backward:', error);
+			safeSetState((prev) => ({ ...prev, error: 'Failed to skip backward' }));
 		}
 	};
 
 	const setPlaybackRate = async (rate: number) => {
 		try {
-			if (soundRef.current) {
-				await soundRef.current.setRateAsync(rate, true);
-				setState((prev) => ({ ...prev, playbackRate: rate }));
+			if (soundRef.current && !isTransitioning.current) {
+				const status = await soundRef.current.getStatusAsync();
+				if (status.isLoaded) {
+					await soundRef.current.setRateAsync(rate, true);
+					safeSetState((prev) => ({ ...prev, playbackRate: rate }));
+				}
 			}
 		} catch (error) {
 			console.error('Error setting playback rate:', error);
+			safeSetState((prev) => ({
+				...prev,
+				error: 'Failed to set playback rate'
+			}));
+		}
+	};
+
+	const navigateToChapter = async (chapter: Chapter) => {
+		if (!currentBookRef.current || isTransitioning.current) return;
+
+		try {
+			const chapterIndex = currentBookRef.current.chapters.findIndex(
+				(c) => c.id === chapter.id
+			);
+
+			if (chapterIndex !== -1) {
+				currentChapterIndexRef.current = chapterIndex;
+				await loadChapter(chapter);
+				await play();
+			}
+		} catch (error) {
+			console.error('Error navigating to chapter:', error);
+			safeSetState((prev) => ({
+				...prev,
+				error: 'Failed to navigate to chapter'
+			}));
 		}
 	};
 

@@ -1,53 +1,56 @@
-import axios, { AxiosInstance } from 'axios';
+// src/services/api/googleBooks.ts
+import axios from 'axios';
 import { API_CONFIG } from '../../config/api';
 
+interface GoogleBookInfo {
+	title: string;
+	authors?: string[];
+	description?: string;
+	categories?: string[];
+	imageLinks?: {
+		thumbnail?: string;
+		smallThumbnail?: string;
+	};
+	publishedDate?: string;
+	averageRating?: number;
+	ratingsCount?: number;
+}
+
 class GoogleBooksAPI {
-	private api: AxiosInstance;
+	private api;
 
 	constructor() {
 		this.api = axios.create({
-			baseURL: API_CONFIG.GOOGLE_BOOKS.BASE_URL,
-			params: {
-				key: API_CONFIG.GOOGLE_BOOKS.API_KEY
-			}
+			baseURL: API_CONFIG.GOOGLE_BOOKS.BASE_URL
 		});
 	}
 
-	async getBookInfo(title: string, author?: string): Promise<any> {
+	async getBookInfo(
+		title: string,
+		author?: string
+	): Promise<GoogleBookInfo | null> {
 		try {
 			const query = author
-				? `intitle:${title}+inauthor:${author}`
-				: `intitle:${title}`;
+				? `intitle:"${title}"+inauthor:"${author}"`
+				: `intitle:"${title}"`;
 
 			const response = await this.api.get('/volumes', {
 				params: {
 					q: query,
+					key: API_CONFIG.GOOGLE_BOOKS.API_KEY,
 					maxResults: 1
 				}
 			});
 
-			return response.data.items?.[0] || null;
-		} catch (error) {
-			console.error('Google Books API Error:', error);
-			throw this.handleError(error);
-		}
-	}
-
-	private handleError(error: any): Error {
-		if (axios.isAxiosError(error)) {
-			if (error.response) {
-				return new Error(
-					`Google Books API Error: ${error.response.status} - ${
-						error.response.data?.message || 'Unknown error'
-					}`
-				);
-			} else if (error.request) {
-				return new Error('Network Error: No response from Google Books API');
+			if (response.data.items?.[0]?.volumeInfo) {
+				return response.data.items[0].volumeInfo;
 			}
+
+			return null;
+		} catch (error) {
+			console.error('Error fetching Google Books data:', error);
+			return null;
 		}
-		return new Error(
-			'Unknown Error occurred while fetching from Google Books API'
-		);
 	}
 }
 

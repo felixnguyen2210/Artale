@@ -93,4 +93,5 @@ export interface PlayerState {
 	isBuffering: boolean;
 	currentChapter?: Chapter;
 	currentBook?: AudioBook;
+	error: string | null;
 }
