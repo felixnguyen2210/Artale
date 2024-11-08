@@ -32,14 +32,14 @@ export const SleepTimer = ({
 
 	const handleSetTimer = () => {
 		if (hours === 0 && minutes === 0) {
-			// If only seconds, convert to minutes (10 seconds = 10/60 minutes)
-			onSetTimer(seconds / 60);
+			const seconds_to_minutes = seconds / 60;
+
+			onSetTimer(seconds_to_minutes);
 		} else {
-			// For hours and minutes, calculate total minutes
-			onSetTimer(hours * 60 + minutes + seconds / 60);
+			const totalMinutes = hours * 60 + minutes + seconds / 60;
+			onSetTimer(totalMinutes);
 		}
 	};
-
 	const renderPickerItems = (
 		count: number,
 		label: string,

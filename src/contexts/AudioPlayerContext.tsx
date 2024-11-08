@@ -108,7 +108,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 
 			safeSetState((prev) => ({
 				...prev,
-				sleepTimer: minutes < 1 ? minutes * 60 : minutes
+				sleepTimer: minutes
 			}));
 		} else {
 			safeSetState((prev) => ({ ...prev, sleepTimer: null }));

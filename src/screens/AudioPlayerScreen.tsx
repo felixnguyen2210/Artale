@@ -251,7 +251,11 @@ const AudioPlayerScreen = () => {
 								onPress={handleSleepTimer}>
 								<Clock color={colors.text.primary} size={24} />
 								<Text style={styles.actionText}>
-									{state.sleepTimer ? `${state.sleepTimer}m` : 'Sleep'}
+									{state.sleepTimer
+										? state.sleepTimer < 1
+											? `${Math.round(state.sleepTimer * 60)}s` // Convert to seconds for display
+											: `${Math.round(state.sleepTimer)}m` // Show minutes
+										: 'Sleep'}
 								</Text>
 							</TouchableOpacity>
 
