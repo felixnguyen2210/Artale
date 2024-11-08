@@ -34,6 +34,7 @@ import { GlassContainer } from '../components/common/GlassContainer';
 import { useSlideAnimation } from '../hooks/useSlideAnimation';
 import type { RootStackParamList } from '../types/navigation';
 import { SleepTimer } from '../components/player/SleepTimer';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type AudioPlayerRouteProp = RouteProp<RootStackParamList, 'AudioPlayer'>;
@@ -358,14 +359,24 @@ const AudioPlayerScreen = () => {
 								]
 							}
 						]}>
-						<GlassContainer style={styles.modalContent}>
-							<View style={styles.modalHandle} />
-							<SleepTimer
-								onSetTimer={handleSetSleepTimer}
-								onCancel={handleCancelSleepTimer}
-								remainingTime={state.sleepTimer ? state.sleepTimer * 60 : null}
-							/>
-						</GlassContainer>
+						<LinearGradient
+							colors={[
+								colors.gradient.start,
+								colors.gradient.middle,
+								colors.gradient.end
+							]}
+							style={styles.gradient}>
+							<GlassContainer style={styles.modalContent}>
+								<View style={styles.modalHandle} />
+								<SleepTimer
+									onSetTimer={handleSetSleepTimer}
+									onCancel={handleCancelSleepTimer}
+									remainingTime={
+										state.sleepTimer ? state.sleepTimer * 60 : null
+									}
+								/>
+							</GlassContainer>
+						</LinearGradient>
 					</Animated.View>
 				)}
 			</GradientBackground>
@@ -480,7 +491,9 @@ const styles = StyleSheet.create({
 	modalContent: {
 		borderTopLeftRadius: 24,
 		borderTopRightRadius: 24,
-		padding: spacing.md
+		padding: spacing.md,
+		backgroundColor:
+			'linear-gradient(to bottom right, colors.gradient.start,colors.gradient.middle ,colors.gradient.end)'
 	},
 	modalHeader: {
 		flexDirection: 'row',
@@ -553,6 +566,11 @@ const styles = StyleSheet.create({
 		color: colors.text.primary,
 		fontSize: 16,
 		fontWeight: '600'
+	},
+	gradient: {
+		flex: 1,
+		borderTopLeftRadius: 24,
+		borderTopRightRadius: 24
 	}
 });
 

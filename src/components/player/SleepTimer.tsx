@@ -31,8 +31,13 @@ export const SleepTimer = ({
 	const [seconds, setSeconds] = useState(0);
 
 	const handleSetTimer = () => {
-		const totalMinutes = hours * 60 + minutes + seconds / 60;
-		onSetTimer(totalMinutes);
+		if (hours === 0 && minutes === 0) {
+			// If only seconds, convert to minutes (10 seconds = 10/60 minutes)
+			onSetTimer(seconds / 60);
+		} else {
+			// For hours and minutes, calculate total minutes
+			onSetTimer(hours * 60 + minutes + seconds / 60);
+		}
 	};
 
 	const renderPickerItems = (
@@ -51,7 +56,7 @@ export const SleepTimer = ({
 					);
 					setValue(selectedIndex);
 				}}>
-				<View style={{ height: PICKER_HEIGHT / 2 }} />
+				<View style={{ height: PICKER_HEIGHT / 2.5 }} />
 				{Array(count)
 					.fill(0)
 					.map((_, index) => (

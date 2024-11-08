@@ -96,7 +96,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 		}
 
 		if (minutes !== null && minutes > 0) {
-			const milliseconds = minutes * 60 * 1000;
+			const milliseconds = Math.round(minutes * 60 * 1000);
 			sleepTimerRef.current = setTimeout(async () => {
 				try {
 					await pause();
@@ -106,7 +106,10 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 				}
 			}, milliseconds);
 
-			safeSetState((prev) => ({ ...prev, sleepTimer: minutes }));
+			safeSetState((prev) => ({
+				...prev,
+				sleepTimer: minutes < 1 ? minutes * 60 : minutes
+			}));
 		} else {
 			safeSetState((prev) => ({ ...prev, sleepTimer: null }));
 		}
