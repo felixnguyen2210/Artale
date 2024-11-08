@@ -162,18 +162,30 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 	// ... (previous code remains the same until onPlaybackStatusUpdate)
 
 	const loadBook = async (book: AudioBook) => {
+		if (!book || !book.chapters || book.chapters.length === 0) {
+			throw new Error('Invalid book data');
+		}
+
 		try {
 			currentBookRef.current = book;
 			currentChapterIndexRef.current = 0;
+
 			safeSetState((prev) => ({
 				...prev,
 				currentBook: book,
-				error: null
+				error: null,
+				isBuffering: true
 			}));
+
 			await loadChapter(book.chapters[0]);
 		} catch (error) {
 			console.error('Error loading book:', error);
-			safeSetState((prev) => ({ ...prev, error: 'Failed to load book' }));
+			safeSetState((prev) => ({
+				...prev,
+				error: 'Failed to load book',
+				isBuffering: false
+			}));
+			throw error;
 		}
 	};
 

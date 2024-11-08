@@ -2,8 +2,11 @@ import { AudioBook } from './audio';
 
 export type RootStackParamList = {
 	MainTabs: undefined;
-	AudioPlayer: undefined;
+	AudioPlayer: {
+		book: AudioBook;
+	};
 	BookDetails: { book: AudioBook };
+	Home: undefined;
 };
 
 declare global {

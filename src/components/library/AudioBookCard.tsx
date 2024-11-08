@@ -1,21 +1,33 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { Book, PlayCircle, Pause } from 'lucide-react-native';
+import React, { useState } from 'react';
+import {
+	View,
+	Text,
+	TouchableOpacity,
+	StyleSheet,
+	Image,
+	ActivityIndicator,
+	ViewStyle,
+	TextStyle,
+	ImageStyle
+} from 'react-native';
+import { Book } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { GlassContainer } from '../common/GlassContainer';
 import { AudioBook } from '../../types/audio';
-import { useAudioPlayer } from '../../contexts/AudioPlayerContext';
+import { RootStackParamList } from '../../types/navigation';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface AudioBookCardProps {
 	book: AudioBook;
 }
 
 export const AudioBookCard = ({ book }: AudioBookCardProps) => {
-	const { state, loadBook, play, pause } = useAudioPlayer();
-
-	const isThisBookPlaying =
-		state.currentBook?.id === book.id && state.isPlaying;
+	const navigation = useNavigation<NavigationProp>();
+	const [isLoading, setIsLoading] = useState(false);
 
 	const formatDuration = (seconds: number) => {
 		const hours = Math.floor(seconds / 3600);
@@ -23,22 +35,32 @@ export const AudioBookCard = ({ book }: AudioBookCardProps) => {
 		return hours > 0 ? `${hours}h ${minutes}m` : `${minutes} minutes`;
 	};
 
-	const handlePlayPress = async () => {
-		console.log('Book data:', book); // Add this to see what data we have
-		if (state.currentBook?.id === book.id) {
-			if (state.isPlaying) {
-				await pause();
-			} else {
-				await play();
+	const handlePress = async () => {
+		if (isLoading) return;
+
+		try {
+			setIsLoading(true);
+
+			if (!book.chapters || book.chapters.length === 0) {
+				console.error('Invalid book data: No chapters found', book);
+				return;
 			}
-		} else {
-			await loadBook(book);
-			await play();
+
+			if (!book.chapters[0]?.audioUrl) {
+				console.error('Invalid book data: No audio URL found', book);
+				return;
+			}
+
+			navigation.navigate('AudioPlayer', { book });
+		} catch (error) {
+			console.error('Error navigating to audio player:', error);
+		} finally {
+			setIsLoading(false);
 		}
 	};
 
 	return (
-		<TouchableOpacity onPress={handlePlayPress}>
+		<TouchableOpacity onPress={handlePress} disabled={isLoading}>
 			<GlassContainer style={styles.container}>
 				<View style={styles.content}>
 					{book.coverUrl ? (
@@ -49,17 +71,19 @@ export const AudioBookCard = ({ book }: AudioBookCardProps) => {
 						</View>
 					)}
 					<View style={styles.info}>
-						<Text style={styles.title}>{book.title}</Text>
-						<Text style={styles.author}>{book.author}</Text>
+						<Text style={styles.title} numberOfLines={1}>
+							{book.title}
+						</Text>
+						<Text style={styles.author} numberOfLines={1}>
+							{book.author}
+						</Text>
 						<Text style={styles.duration}>{formatDuration(book.duration)}</Text>
 					</View>
-					<TouchableOpacity style={styles.playButton} onPress={handlePlayPress}>
-						{isThisBookPlaying ? (
-							<Pause color={colors.text.primary} size={24} />
-						) : (
-							<PlayCircle color={colors.text.primary} size={24} />
-						)}
-					</TouchableOpacity>
+					{isLoading && (
+						<View style={styles.loadingOverlay}>
+							<ActivityIndicator color={colors.primary} />
+						</View>
+					)}
 				</View>
 			</GlassContainer>
 		</TouchableOpacity>
@@ -69,17 +93,17 @@ export const AudioBookCard = ({ book }: AudioBookCardProps) => {
 const styles = StyleSheet.create({
 	container: {
 		marginVertical: spacing.sm
-	},
+	} as ViewStyle,
 	content: {
 		flexDirection: 'row',
 		alignItems: 'center',
 		padding: spacing.md
-	},
+	} as ViewStyle,
 	cover: {
 		width: 60,
 		height: 60,
 		borderRadius: 8
-	},
+	} as ImageStyle,
 	placeholderCover: {
 		width: 60,
 		height: 60,
@@ -87,27 +111,31 @@ const styles = StyleSheet.create({
 		backgroundColor: colors.glass.medium,
 		justifyContent: 'center',
 		alignItems: 'center'
-	},
+	} as ViewStyle,
 	info: {
 		flex: 1,
 		marginLeft: spacing.md
-	},
+	} as ViewStyle,
 	title: {
 		fontSize: 16,
 		fontWeight: '600',
 		color: colors.text.primary
-	},
+	} as TextStyle,
 	author: {
 		fontSize: 14,
 		color: colors.text.secondary,
 		marginTop: 4
-	},
+	} as TextStyle,
 	duration: {
 		fontSize: 12,
 		color: colors.text.tertiary,
 		marginTop: 4
-	},
-	playButton: {
-		padding: spacing.sm
-	}
+	} as TextStyle,
+	loadingOverlay: {
+		...StyleSheet.absoluteFillObject,
+		backgroundColor: 'rgba(0,0,0,0.3)',
+		justifyContent: 'center',
+		alignItems: 'center',
+		borderRadius: 8
+	} as ViewStyle
 });

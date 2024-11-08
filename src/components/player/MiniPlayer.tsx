@@ -23,7 +23,12 @@ export const MiniPlayer = () => {
 	};
 
 	const handlePress = () => {
-		navigation.navigate('AudioPlayer');
+		if (state.currentBook) {
+			// Extra type guard for TypeScript
+			navigation.navigate('AudioPlayer', {
+				book: state.currentBook // Now TypeScript knows this is defined
+			});
+		}
 	};
 
 	return (

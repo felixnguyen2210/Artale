@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
 	Animated,
 	View,
@@ -6,7 +6,8 @@ import {
 	StyleSheet,
 	TouchableOpacity,
 	Image,
-	ScrollView
+	ScrollView,
+	ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -17,7 +18,9 @@ import {
 	Settings,
 	Share2
 } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
 import { colors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { GradientBackground } from '../components/common/GradientBackground';
@@ -29,18 +32,26 @@ import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import { Chapter } from '../types/audio';
 import { GlassContainer } from '../components/common/GlassContainer';
 import { useSlideAnimation } from '../hooks/useSlideAnimation';
+import type { RootStackParamList } from '../types/navigation';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type AudioPlayerRouteProp = RouteProp<RootStackParamList, 'AudioPlayer'>;
 
 const AudioPlayerScreen = () => {
-	const navigation = useNavigation();
+	const navigation = useNavigation<NavigationProp>();
+	const route = useRoute<AudioPlayerRouteProp>();
+	const { book } = route.params || {};
+	const [isLoading, setIsLoading] = useState(true);
 	const {
 		state,
+		loadBook,
 		play,
 		pause,
 		seekTo,
 		setPlaybackRate,
-		skipForward,
-		skipBackward,
-		navigateToChapter
+		skipForward, // Restored
+		skipBackward, // Restored
+		navigateToChapter // Restored
 	} = useAudioPlayer();
 
 	const [showChapters, setShowChapters] = useState(false);
@@ -49,6 +60,30 @@ const AudioPlayerScreen = () => {
 	const chaptersAnimation = useSlideAnimation(showChapters);
 	const settingsAnimation = useSlideAnimation(showSettings);
 	const overlayAnimation = useSlideAnimation(showChapters || showSettings);
+
+	useEffect(() => {
+		const setupAudioPlayer = async () => {
+			try {
+				setIsLoading(true);
+				// If we have a book from params and it's different from current book, load it
+				if (book && (!state.currentBook || book.id !== state.currentBook.id)) {
+					await loadBook(book);
+					await play();
+				} else if (state.currentBook) {
+					// We're returning from MiniPlayer, no need to reload
+					setIsLoading(false);
+				} else {
+					throw new Error('No book data available');
+				}
+			} catch (error) {
+				console.error('Error setting up audio player:', error);
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		setupAudioPlayer();
+	}, [book?.id, state.currentBook?.id]);
 
 	const handlePlayPause = async () => {
 		if (state.isPlaying) {
@@ -64,15 +99,84 @@ const AudioPlayerScreen = () => {
 	};
 
 	const handleChapterPress = async (chapter: Chapter) => {
-		await navigateToChapter(chapter);
-		setShowChapters(false);
+		try {
+			await navigateToChapter(chapter);
+			setShowChapters(false);
+		} catch (error) {
+			console.error('Error seeking to chapter:', error);
+		}
 	};
 
-	if (!state.currentBook) return null;
+	// Add validation
+	if (!book) {
+		return (
+			<SafeAreaView style={styles.container}>
+				<GradientBackground>
+					<View style={styles.errorContainer}>
+						<Text style={styles.errorText}>Book data not found</Text>
+						<TouchableOpacity
+							onPress={() => navigation.goBack()}
+							style={styles.errorButton}>
+							<Text style={styles.errorButtonText}>Go Back</Text>
+						</TouchableOpacity>
+					</View>
+				</GradientBackground>
+			</SafeAreaView>
+		);
+	}
+
+	// Add loading state
+	if (isLoading && !state.currentBook) {
+		return (
+			<SafeAreaView style={styles.container}>
+				<GradientBackground>
+					<View style={styles.loadingContainer}>
+						<ActivityIndicator size='large' color={colors.primary} />
+					</View>
+				</GradientBackground>
+			</SafeAreaView>
+		);
+	}
+
+	if (!state.currentBook) {
+		return (
+			<SafeAreaView style={styles.container}>
+				<GradientBackground>
+					<View style={styles.errorContainer}>
+						<Text style={styles.errorText}>Book data not found</Text>
+						<TouchableOpacity
+							onPress={() => navigation.goBack()}
+							style={styles.errorButton}>
+							<Text style={styles.errorButtonText}>Go Back</Text>
+						</TouchableOpacity>
+					</View>
+				</GradientBackground>
+			</SafeAreaView>
+		);
+	}
+
+	// Add error state
+	if (state.error) {
+		return (
+			<SafeAreaView style={styles.container}>
+				<GradientBackground>
+					<View style={styles.errorContainer}>
+						<Text style={styles.errorText}>{state.error}</Text>
+						<TouchableOpacity
+							onPress={() => navigation.goBack()}
+							style={styles.errorButton}>
+							<Text style={styles.errorButtonText}>Go Back</Text>
+						</TouchableOpacity>
+					</View>
+				</GradientBackground>
+			</SafeAreaView>
+		);
+	}
 
 	return (
 		<SafeAreaView style={styles.container}>
 			<GradientBackground>
+				{/* Your existing header */}
 				<View style={styles.header}>
 					<TouchableOpacity
 						onPress={() => navigation.goBack()}
@@ -81,7 +185,7 @@ const AudioPlayerScreen = () => {
 					</TouchableOpacity>
 					<Text style={styles.headerTitle}>Now Playing</Text>
 					<TouchableOpacity
-						onPress={() => console.log('Share')}
+						onPress={() => {}} // TODO: Implement share
 						style={styles.iconButton}>
 						<Share2 color={colors.text.primary} size={24} />
 					</TouchableOpacity>
@@ -91,7 +195,9 @@ const AudioPlayerScreen = () => {
 					style={styles.scrollView}
 					contentContainerStyle={styles.contentContainer}
 					showsVerticalScrollIndicator={false}>
+					{/* Your existing main content */}
 					<View style={styles.mainContent}>
+						{/* Cover Art */}
 						<View style={styles.coverArt}>
 							{state.currentBook.coverUrl ? (
 								<Image
@@ -105,18 +211,16 @@ const AudioPlayerScreen = () => {
 							)}
 						</View>
 
+						{/* Book Info */}
 						<View style={styles.bookInfo}>
 							<Text style={styles.title}>{state.currentBook.title}</Text>
 							<Text style={styles.author}>{state.currentBook.author}</Text>
 							{state.currentChapter && (
-								<View style={styles.chapterInfo}>
-									<Text style={styles.chapterTitle}>
-										{state.currentChapter.title}
-									</Text>
-								</View>
+								<Text style={styles.chapter}>{state.currentChapter.title}</Text>
 							)}
 						</View>
 
+						{/* Controls */}
 						<View style={styles.actionButtons}>
 							<TouchableOpacity
 								style={styles.actionButton}
@@ -149,8 +253,8 @@ const AudioPlayerScreen = () => {
 						<PlayerControls
 							isPlaying={state.isPlaying}
 							onPlayPause={handlePlayPause}
-							onSkipForward={skipForward}
-							onSkipBack={skipBackward}
+							onSkipForward={skipForward} // Using skipForward
+							onSkipBack={skipBackward} // Using skipBackward
 						/>
 					</View>
 				</ScrollView>
@@ -367,6 +471,41 @@ const styles = StyleSheet.create({
 		fontSize: 12,
 		color: colors.text.secondary,
 		marginTop: spacing.xs
+	},
+	chapter: {
+		// Add this missing style
+		fontSize: 14,
+		color: colors.text.secondary,
+		marginTop: spacing.xs,
+		textAlign: 'center'
+	},
+	loadingContainer: {
+		flex: 1,
+		justifyContent: 'center',
+		alignItems: 'center'
+	},
+	errorContainer: {
+		flex: 1,
+		justifyContent: 'center',
+		alignItems: 'center',
+		padding: spacing.lg
+	},
+	errorText: {
+		color: colors.text.primary,
+		fontSize: 16,
+		textAlign: 'center',
+		marginBottom: spacing.md
+	},
+	errorButton: {
+		backgroundColor: colors.primary,
+		paddingHorizontal: spacing.lg,
+		paddingVertical: spacing.md,
+		borderRadius: 8
+	},
+	errorButtonText: {
+		color: colors.text.primary,
+		fontSize: 16,
+		fontWeight: '600'
 	}
 });
 

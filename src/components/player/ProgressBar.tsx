@@ -22,8 +22,8 @@ interface ProgressBarProps {
 }
 
 export const ProgressBar = ({
-	currentTime,
-	duration,
+	currentTime = 0,
+	duration = 0,
 	onSeek
 }: ProgressBarProps) => {
 	const [isDragging, setIsDragging] = useState(false);
@@ -85,12 +85,17 @@ export const ProgressBar = ({
 		});
 
 	const progressStyle = useAnimatedStyle(() => {
+		// Add safety checks
+		const safeWidth = width || 0;
+		const safeDuration = Math.max(duration, 0.1); // Prevent division by zero
+		const safeCurrentTime = Math.max(currentTime, 0);
+
 		const currentProgress = isDragging
 			? progressWidth.value
-			: (currentTime / duration) * width;
+			: (safeCurrentTime / safeDuration) * safeWidth;
 
 		return {
-			width: Math.max(0, Math.min(currentProgress, width)),
+			width: Math.max(0, Math.min(currentProgress, safeWidth)),
 			height: progressHeight.value,
 			shadowOpacity: progressGlow.value,
 			shadowRadius: progressGlow.value * 4
@@ -98,14 +103,18 @@ export const ProgressBar = ({
 	});
 
 	const handleStyle = useAnimatedStyle(() => {
+		const safeWidth = width || 0;
+		const safeDuration = Math.max(duration, 0.1);
+		const safeCurrentTime = Math.max(currentTime, 0);
+
 		const currentProgress = isDragging
 			? progressWidth.value
-			: (currentTime / duration) * width;
+			: (safeCurrentTime / safeDuration) * safeWidth;
 
 		return {
 			opacity: handleOpacity.value,
 			transform: [
-				{ translateX: currentProgress },
+				{ translateX: Math.max(0, Math.min(currentProgress, safeWidth)) },
 				{ translateY: -16 },
 				{ scale: handleScale.value }
 			]
