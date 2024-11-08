@@ -73,6 +73,10 @@ export interface AudioBook {
 	publishedDate?: string;
 	downloadSize?: number;
 	progress?: number;
+	publisher?: string;
+	rating?: number;
+	ratingCount?: number;
+	categories?: string[];
 }
 
 export interface AudioBookFilter {

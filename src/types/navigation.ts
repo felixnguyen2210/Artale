@@ -1,16 +1,12 @@
+// src/types/navigation.ts
 import { AudioBook } from './audio';
 
 export type RootStackParamList = {
-	MainTabs: undefined;
+	LibraryScreen: undefined;
+	BookDetails: {
+		book: AudioBook;
+	};
 	AudioPlayer: {
 		book: AudioBook;
 	};
-	BookDetails: { book: AudioBook };
-	Home: undefined;
 };
-
-declare global {
-	namespace ReactNavigation {
-		interface RootParamList extends RootStackParamList {}
-	}
-}

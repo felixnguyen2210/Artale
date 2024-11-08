@@ -12,6 +12,7 @@ import { colors } from '../theme/colors';
 import { RootStackParamList } from '../types/navigation';
 import LibraryScreen from '../screens/LibraryScreen';
 import AudioPlayerScreen from '../screens/AudioPlayerScreen';
+import BookDetailsScreen from 'screens/BookDetailsScreen';
 
 // Temporary placeholder screens
 const PlaceholderScreen = () => null;
@@ -83,6 +84,14 @@ const RootNavigator = () => {
 			<Stack.Screen
 				name='AudioPlayer'
 				component={AudioPlayerScreen}
+				options={{
+					presentation: 'modal',
+					animation: 'slide_from_bottom'
+				}}
+			/>
+			<Stack.Screen
+				name='BookDetails'
+				component={BookDetailsScreen}
 				options={{
 					presentation: 'modal',
 					animation: 'slide_from_bottom'

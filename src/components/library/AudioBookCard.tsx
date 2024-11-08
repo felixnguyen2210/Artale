@@ -51,9 +51,9 @@ export const AudioBookCard = ({ book }: AudioBookCardProps) => {
 				return;
 			}
 
-			navigation.navigate('AudioPlayer', { book });
+			navigation.navigate('BookDetails', { book });
 		} catch (error) {
-			console.error('Error navigating to audio player:', error);
+			console.error('Error navigating to book details:', error);
 		} finally {
 			setIsLoading(false);
 		}
