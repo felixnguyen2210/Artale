@@ -33,6 +33,7 @@ import { Chapter } from '../types/audio';
 import { GlassContainer } from '../components/common/GlassContainer';
 import { useSlideAnimation } from '../hooks/useSlideAnimation';
 import type { RootStackParamList } from '../types/navigation';
+import { SleepTimer } from '../components/player/SleepTimer';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type AudioPlayerRouteProp = RouteProp<RootStackParamList, 'AudioPlayer'>;
@@ -49,17 +50,20 @@ const AudioPlayerScreen = () => {
 		pause,
 		seekTo,
 		setPlaybackRate,
-		skipForward, // Restored
-		skipBackward, // Restored
-		navigateToChapter // Restored
+		skipForward,
+		skipBackward,
+		navigateToChapter,
+		setSleepTimer
 	} = useAudioPlayer();
 
 	const [showChapters, setShowChapters] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
+	const [showSleepTimer, setShowSleepTimer] = useState(false);
 
 	const chaptersAnimation = useSlideAnimation(showChapters);
 	const settingsAnimation = useSlideAnimation(showSettings);
 	const overlayAnimation = useSlideAnimation(showChapters || showSettings);
+	const sleepTimerAnimation = useSlideAnimation(showSleepTimer);
 
 	useEffect(() => {
 		const setupAudioPlayer = async () => {
@@ -94,8 +98,17 @@ const AudioPlayerScreen = () => {
 	};
 
 	const handleSleepTimer = () => {
-		// TODO: Implement sleep timer
-		console.log('Sleep timer pressed');
+		setShowSleepTimer(true);
+	};
+
+	const handleSetSleepTimer = (minutes: number) => {
+		setSleepTimer(minutes);
+		setShowSleepTimer(false);
+	};
+
+	const handleCancelSleepTimer = () => {
+		setSleepTimer(null);
+		setShowSleepTimer(false);
 	};
 
 	const handleChapterPress = async (chapter: Chapter) => {
@@ -230,10 +243,15 @@ const AudioPlayerScreen = () => {
 							</TouchableOpacity>
 
 							<TouchableOpacity
-								style={styles.actionButton}
+								style={[
+									styles.actionButton,
+									state.sleepTimer ? styles.actionButtonActive : null
+								]}
 								onPress={handleSleepTimer}>
 								<Clock color={colors.text.primary} size={24} />
-								<Text style={styles.actionText}>Sleep</Text>
+								<Text style={styles.actionText}>
+									{state.sleepTimer ? `${state.sleepTimer}m` : 'Sleep'}
+								</Text>
 							</TouchableOpacity>
 
 							<TouchableOpacity
@@ -260,7 +278,7 @@ const AudioPlayerScreen = () => {
 				</ScrollView>
 
 				{/* Modals */}
-				{(showChapters || showSettings) && (
+				{(showChapters || showSettings || showSleepTimer) && (
 					<Animated.View
 						style={[
 							styles.modalOverlay,
@@ -273,6 +291,7 @@ const AudioPlayerScreen = () => {
 							onPress={() => {
 								setShowChapters(false);
 								setShowSettings(false);
+								setShowSleepTimer(false);
 							}}
 						/>
 					</Animated.View>
@@ -326,12 +345,40 @@ const AudioPlayerScreen = () => {
 						</GlassContainer>
 					</Animated.View>
 				)}
+
+				{showSleepTimer && (
+					<Animated.View
+						style={[
+							styles.modal,
+							{
+								transform: [
+									{
+										translateY: sleepTimerAnimation.translateY
+									}
+								]
+							}
+						]}>
+						<GlassContainer style={styles.modalContent}>
+							<View style={styles.modalHandle} />
+							<SleepTimer
+								onSetTimer={handleSetSleepTimer}
+								onCancel={handleCancelSleepTimer}
+								remainingTime={state.sleepTimer ? state.sleepTimer * 60 : null}
+							/>
+						</GlassContainer>
+					</Animated.View>
+				)}
 			</GradientBackground>
 		</SafeAreaView>
 	);
 };
 
 const styles = StyleSheet.create({
+	actionButtonActive: {
+		backgroundColor: colors.glass.medium,
+		borderRadius: 12,
+		padding: spacing.sm
+	},
 	container: {
 		flex: 1
 	},

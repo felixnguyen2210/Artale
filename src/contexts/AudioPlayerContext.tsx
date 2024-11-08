@@ -25,6 +25,7 @@ interface AudioPlayerContextType {
 	skipBackward: () => Promise<void>;
 	setPlaybackRate: (rate: number) => Promise<void>;
 	navigateToChapter: (chapter: Chapter) => Promise<void>;
+	setSleepTimer: (minutes: number | null) => void;
 }
 
 const initialState: PlayerState = {
@@ -35,7 +36,8 @@ const initialState: PlayerState = {
 	isBuffering: false,
 	currentBook: undefined,
 	currentChapter: undefined,
-	error: null
+	error: null,
+	sleepTimer: null
 };
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(
@@ -51,11 +53,15 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 	const currentChapterIndexRef = useRef<number>(0);
 	const isMounted = useRef(true);
 	const isTransitioning = useRef(false);
+	const sleepTimerRef = useRef<NodeJS.Timeout | null>(null);
 
 	useEffect(() => {
 		setupAudio();
 		return () => {
 			isMounted.current = false;
+			if (sleepTimerRef.current) {
+				clearTimeout(sleepTimerRef.current);
+			}
 			cleanup();
 		};
 	}, []);
@@ -83,8 +89,35 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 		}
 	};
 
+	const setSleepTimer = (minutes: number | null) => {
+		if (sleepTimerRef.current) {
+			clearTimeout(sleepTimerRef.current);
+			sleepTimerRef.current = null;
+		}
+
+		if (minutes !== null && minutes > 0) {
+			const milliseconds = minutes * 60 * 1000;
+			sleepTimerRef.current = setTimeout(async () => {
+				try {
+					await pause();
+					safeSetState((prev) => ({ ...prev, sleepTimer: null }));
+				} catch (error) {
+					console.error('Error in sleep timer:', error);
+				}
+			}, milliseconds);
+
+			safeSetState((prev) => ({ ...prev, sleepTimer: minutes }));
+		} else {
+			safeSetState((prev) => ({ ...prev, sleepTimer: null }));
+		}
+	};
+
 	const cleanup = async () => {
 		try {
+			if (sleepTimerRef.current) {
+				clearTimeout(sleepTimerRef.current);
+				sleepTimerRef.current = null;
+			}
 			if (soundRef.current) {
 				const status = await soundRef.current.getStatusAsync();
 				if (status.isLoaded) {
@@ -96,7 +129,8 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 			safeSetState((prev) => ({
 				...prev,
 				isPlaying: false,
-				isBuffering: false
+				isBuffering: false,
+				sleepTimer: null // Reset sleep timer state
 			}));
 		} catch (error) {
 			console.error('Error cleaning up audio:', error);
@@ -377,7 +411,8 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 		skipForward,
 		skipBackward,
 		setPlaybackRate,
-		navigateToChapter
+		navigateToChapter,
+		setSleepTimer
 	};
 
 	return (

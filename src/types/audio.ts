@@ -94,4 +94,5 @@ export interface PlayerState {
 	currentChapter?: Chapter;
 	currentBook?: AudioBook;
 	error: string | null;
+	sleepTimer: number | null;
 }
